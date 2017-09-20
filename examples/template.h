@@ -47,6 +47,39 @@ template <typename F, typename... T> Defer<F, T...> defer(F &&f, T &&... t) {
   return Defer<F, T...>(std::forward<F>(f), std::forward<T>(t)...);
 }
 
+// use chained methods to call functions on a target object
+template <typename O, typename D, typename C, typename... P> struct Anchor {
+  Anchor(D &&d, C &&c, P &&... p)
+      : o(std::bind(std::forward<C>(c), std::forward<P>(p)...)()),
+        d(std::bind(std::forward<D>(d), std::forward<O>(o))) {}
+  Anchor(Anchor &&a)
+      : o(std::move(a.o)),
+        d(std::move(a.d)) { a.o = O(); a.d = nullptr; }
+  ~Anchor() { if (d != nullptr) d(); }
+
+  template <typename F, typename... T>
+  Anchor<O, D, C, P...>&& chain(F &&f, T &&... t) {
+    std::bind(std::forward<F>(f), std::forward<O>(o), std::forward<T>(t)...)();
+
+    return std::move(*this);
+  }
+
+  O o;
+
+  using ResultType = typename std::result_of<typename std::decay<D>::type(
+      typename std::decay<O>::type)>::type;
+  std::function<ResultType()> d;
+};
+
+template <typename D, typename C, typename... P,
+          typename O = typename std::result_of<typename std::decay<C>::type(
+              typename std::decay<P>::type...)>::type>
+Anchor<O, D, C, P...> anchor(D &&d, C &&c, P &&... p) {
+  return Anchor<O, D, C, P...>(std::forward<D>(d), std::forward<C>(c),
+                               std::forward<P>(p)...);
+}
+
+// Functions to resolve array sizes
 template <typename T, size_t N> constexpr size_t array_size(T (&)[N]) {
   return N;
 }
@@ -56,7 +89,6 @@ template <typename T, size_t N> constexpr size_t str_size(T (&)[N]) {
 }
 
 // User-defined literals for K, M, and G (powers of 1024)
-
 constexpr unsigned long long operator"" _k(unsigned long long k) {
   return k * 1024;
 }

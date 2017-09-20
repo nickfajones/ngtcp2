@@ -156,17 +156,14 @@ int bio_destroy(BIO *b) {
 } // namespace
 
 namespace {
-BIO_METHOD *create_bio_method() {
-  static auto meth = BIO_meth_new(BIO_TYPE_FD, "bio");
-  BIO_meth_set_write(meth, bio_write);
-  BIO_meth_set_read(meth, bio_read);
-  BIO_meth_set_puts(meth, bio_puts);
-  BIO_meth_set_gets(meth, bio_gets);
-  BIO_meth_set_ctrl(meth, bio_ctrl);
-  BIO_meth_set_create(meth, bio_create);
-  BIO_meth_set_destroy(meth, bio_destroy);
-  return meth;
-}
+auto bio_method = anchor(BIO_meth_free, BIO_meth_new, BIO_TYPE_FD, "bio")
+                      .chain(BIO_meth_set_write, bio_write)
+                      .chain(BIO_meth_set_read, bio_read)
+                      .chain(BIO_meth_set_puts, bio_puts)
+                      .chain(BIO_meth_set_gets, bio_gets)
+                      .chain(BIO_meth_set_ctrl, bio_ctrl)
+                      .chain(BIO_meth_set_create, bio_create)
+                      .chain(BIO_meth_set_destroy, bio_destroy);
 } // namespace
 
 namespace {
@@ -523,7 +520,7 @@ int Client::init(int fd, const Address &remote_addr, const char *addr,
   }
 
   ssl_ = SSL_new(ssl_ctx_);
-  auto bio = BIO_new(create_bio_method());
+  auto bio = BIO_new(bio_method.o);
   BIO_set_data(bio, this);
   SSL_set_bio(ssl_, bio, bio);
   SSL_set_app_data(ssl_, this);
